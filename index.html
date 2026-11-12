@@ -51,6 +51,7 @@ let peer,conns=[],hostC=null,isHost=false,room=null;
 function send(m,ex){if(isHost)conns.forEach(c=>c!==ex&&c.open&&c.send(m));else if(hostC&&hostC.open)hostC.send(m)}
 function onMsg(m,from){
  if(from&&m.u)from.uid=m.u;
+ if(from&&from.col){if(m.c)m.c=from.col;if(m.s)m.s.c=from.col}
  if(m.t=='base'){lastView=null;pdfBytes=null;setBase(m.d,false)}
  else if(m.t=='pdf'){pdfBytes=new Uint8Array(m.d);pdfNo=m.p||1;openPdf()}
  else if(m.t=='view')applyView(m);
@@ -59,12 +60,13 @@ function onMsg(m,from){
  else if(m.t=='del')delete strokes[m.id];
  else if(m.t=='las'){let l=lasers.find(a=>a.id==m.id);if(!l)lasers.push(l={id:m.id,c:m.c,pts:[]});l.pts.push([m.x,m.y,performance.now()])}
  else if(m.t=='bye')delete ptrs[m.u];
- else if(m.t=='sync'){strokes=m.st||{};ptrs=Object.assign(ptrs,m.pt||{});lastView=m.v||null;pdfBytes=m.pdf?new Uint8Array(m.pdf):null;pdfNo=m.pp||1;if(m.d)setBase(m.d,false,true);else if(lastView)applyView(lastView);if(pdfBytes)openPdf()}
+ else if(m.t=='sync'){if(m.col){me.c=m.col;if(ptrs[me.id]){ptrs[me.id].c=me.c;send(ptrs[me.id])}}
+ strokes=m.st||{};ptrs=Object.assign(ptrs,m.pt||{});lastView=m.v||null;pdfBytes=m.pdf?new Uint8Array(m.pdf):null;pdfNo=m.pp||1;if(m.d)setBase(m.d,false,true);else if(lastView)applyView(lastView);if(pdfBytes)openPdf()}
  if(isHost&&from)send(m,from)}
-function mkRoom(){if(peer)peer.destroy();conns=[];const code=String(1000+Math.floor(Math.random()*9000));peer=new Peer('genba-'+code);isHost=true;
+function mkRoom(){if(peer)peer.destroy();conns=[];const code=String(1000+Math.floor(Math.random()*9000));peer=new Peer('genba-'+code);isHost=true;me.c=COL[0];
  peer.on('open',()=>{room=code;history.replaceState(null,'','#'+code);st();place(true)});
  peer.on('error',e=>{if(e.type=='unavailable-id')mkRoom();else st('接続エラー:'+e.type)});
- peer.on('connection',c=>{c.on('open',()=>{conns.push(c);c.send({t:'sync',st:strokes,d:baseData,pt:ptrs,v:lastView,pdf:pdfBytes,pp:pdfNo});st()});
+ peer.on('connection',c=>{c.on('open',()=>{const used=[me.c,...conns.map(x=>x.col)];c.col=COL.find(x=>!used.includes(x))||COL[conns.length%COL.length];conns.push(c);c.send({t:'sync',st:strokes,d:baseData,pt:ptrs,v:lastView,pdf:pdfBytes,pp:pdfNo,col:c.col});st()});
   c.on('data',m=>onMsg(m,c));
   c.on('close',()=>{conns=conns.filter(x=>x!=c);if(c.uid){delete ptrs[c.uid];send({t:'bye',u:c.uid})}st()})})}
 function joinRoom(code){if(peer)peer.destroy();isHost=false;peer=new Peer();st('接続中…');
