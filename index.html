@@ -4,14 +4,17 @@
 <title>現場図面共有</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=RocknRoll+One&display=swap">
 <style>
-*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:-apple-system,"Hiragino Sans",sans-serif;background:#555}
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:'RocknRoll One','Hiragino Maru Gothic ProN','Hiragino Sans',sans-serif;background:#555}
 body{display:flex;flex-direction:column;overscroll-behavior:none}
 #bar{background:#fff;padding:6px;padding-top:max(6px,env(safe-area-inset-top));display:flex;flex-wrap:wrap;gap:5px;align-items:center;border-bottom:1px solid #ccc;font-size:13px}
-#bar button,#bar select,#bar label.b{font-size:13px;padding:7px 10px;border:1px solid #aaa;border-radius:7px;background:#f4f4f4;color:#222}
-#bar button.on{background:#1d6fd8;color:#fff;border-color:#1d6fd8}
+#bar button,#bar select,#bar label.b{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:15px;padding:4px 11px;border:3px solid #777;border-radius:10px;background:#dce9f8;color:#111;cursor:pointer}
+#bar select{padding:6px 8px}
+#bar button.on{background:#9cc4f5;border-color:#1d6fd8}
+#bar svg{width:24px;height:24px;flex:none}
 #bar .sep{width:1px;height:24px;background:#ccc}
-#st{color:#555;font-size:12px}
+#st{color:#444;font-size:13px}
 #wrap{flex:1;position:relative;min-height:0}
 canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;background:#777}
 </style></head><body>
@@ -21,7 +24,11 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;backgr
  <span class="sep"></span>
  <label class="b">図面読込<input id="file" type="file" accept="image/*,.pdf,.dxf" hidden></label>
  <span class="sep"></span>
- <button data-t="ptr" class="on">矢印</button><button data-t="las">ポインタ</button><button data-t="pen">ペン</button><button data-t="sel">選択</button><button data-t="pan">移動</button>
+ <button data-t="ptr" class="on"><svg viewBox="0 0 24 24"><path d="M4 3L21 12L11 14L8 21Z" fill="#e8574c" stroke="#e8574c" stroke-width="2" stroke-linejoin="round"/></svg>矢印</button>
+ <button data-t="las"><svg viewBox="0 0 24 24"><path d="M18 8A8 8 0 1 0 15 20" fill="none" stroke="#e00" stroke-width="2.6" stroke-linecap="round"/><circle cx="19" cy="6" r="3" fill="#f58aa5"/></svg>レーザーポインター</button>
+ <button data-t="pen"><svg viewBox="0 0 24 24"><path d="M4 21L5.5 15L16 4.5L20 8.5L9.5 19Z" fill="#2a6fb5" stroke="#1b3d63" stroke-width="1.5" stroke-linejoin="round"/><path d="M4 21L5.5 15L9.5 19Z" fill="#333"/></svg>ペン</button>
+ <button data-t="sel"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="#3a9d2f" stroke-width="2.6" stroke-dasharray="4 3"/></svg>選択</button>
+ <button data-t="pan"><svg viewBox="0 0 24 24"><path d="M12 1.5L16.5 7H13.5V10.5H17V7.5L22.5 12L17 16.5V13.5H13.5V17H16.5L12 22.5L7.5 17H10.5V13.5H7V16.5L1.5 12L7 7.5V10.5H10.5V7H7.5Z" fill="#f00"/></svg>移動</button>
  <button id="del">選択を削除</button><button id="fit">全体</button>
  <span id="st">未接続(ひとりで使用中)</span>
 </div>
@@ -43,18 +50,19 @@ let peer,conns=[],hostC=null,isHost=false,room=null;
 function send(m,ex){if(isHost)conns.forEach(c=>c!==ex&&c.open&&c.send(m));else if(hostC&&hostC.open)hostC.send(m)}
 function onMsg(m,from){
  if(from&&m.u)from.uid=m.u;
- if(m.t=='base')setBase(m.d,false);
+ if(m.t=='base'){lastView=null;setBase(m.d,false)}
+ else if(m.t=='view')applyView(m);
  else if(m.t=='ptr')ptrs[m.u]=m;
  else if(m.t=='st')strokes[m.s.id]=m.s;
  else if(m.t=='del')delete strokes[m.id];
  else if(m.t=='las'){let l=lasers.find(a=>a.id==m.id);if(!l)lasers.push(l={id:m.id,c:m.c,pts:[]});l.pts.push([m.x,m.y,performance.now()])}
  else if(m.t=='bye')delete ptrs[m.u];
- else if(m.t=='sync'){strokes=m.st||{};ptrs=Object.assign(ptrs,m.pt||{});if(m.d)setBase(m.d,false,true)}
+ else if(m.t=='sync'){strokes=m.st||{};ptrs=Object.assign(ptrs,m.pt||{});lastView=m.v||null;if(m.d)setBase(m.d,false,true);else if(lastView)applyView(lastView)}
  if(isHost&&from)send(m,from)}
 function mkRoom(){if(peer)peer.destroy();conns=[];const code=String(1000+Math.floor(Math.random()*9000));peer=new Peer('genba-'+code);isHost=true;
  peer.on('open',()=>{room=code;history.replaceState(null,'','#'+code);st();place(true)});
  peer.on('error',e=>{if(e.type=='unavailable-id')mkRoom();else st('接続エラー:'+e.type)});
- peer.on('connection',c=>{c.on('open',()=>{conns.push(c);c.send({t:'sync',st:strokes,d:baseData,pt:ptrs});st()});
+ peer.on('connection',c=>{c.on('open',()=>{conns.push(c);c.send({t:'sync',st:strokes,d:baseData,pt:ptrs,v:lastView});st()});
   c.on('data',m=>onMsg(m,c));
   c.on('close',()=>{conns=conns.filter(x=>x!=c);if(c.uid){delete ptrs[c.uid];send({t:'bye',u:c.uid})}st()})})}
 function joinRoom(code){if(peer)peer.destroy();isHost=false;peer=new Peer();st('接続中…');
@@ -67,7 +75,7 @@ $('jn').onclick=()=>{if(!needName())return;const c=(prompt('部屋番号(4桁)')
 $('cp').onclick=async()=>{if(!room)return alert('先に部屋を作成してください');const u=location.href.split('#')[0]+'#'+room;try{await navigator.clipboard.writeText(u);st('リンクをコピーしました')}catch(e){prompt('このリンクを共有',u)}};
 
 /* ---- 図面読込 ---- */
-function setBase(d,bc,keep){const i=new Image();i.onload=()=>{img=i;baseData=d;W=1000;H=1000*i.height/i.width;if(!keep||true){strokes=keep?strokes:{}}fit();if(bc){send({t:'base',d});}place()};i.src=d}
+function setBase(d,bc,keep){const i=new Image();i.onload=()=>{img=i;baseData=d;W=1000;H=1000*i.height/i.width;if(!keep||true){strokes=keep?strokes:{}}fit();if(bc){send({t:'base',d});sendView()}else if(lastView)applyView(lastView);place()};i.src=d}
 function toBase(src,w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
 function fromCanvas(c){setBase(c.toDataURL('image/jpeg',.82),true)}
 $('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;const n=f.name.toLowerCase();e.target.value='';
@@ -100,7 +108,11 @@ function dxf(t){const L=t.split(/\r?\n/),E=[];let e=null;
 /* ---- 表示・座標 ---- */
 function resize(){const r=cv.getBoundingClientRect();cv.width=r.width*dpr;cv.height=r.height*dpr}
 function fit(){const r=cv.getBoundingClientRect();V.s=Math.min(r.width/W,r.height/H)*.98;V.x=(r.width-W*V.s)/2;V.y=(r.height-H*V.s)/2}
-$('fit').onclick=fit;addEventListener('resize',()=>{resize();fit()});
+let lastView=null,lv=0,vt=0;
+function fitS(){const r=cv.getBoundingClientRect();return Math.min(r.width/W,r.height/H)*.98}
+function sendView(){const r=cv.getBoundingClientRect();lastView={t:'view',z:V.s/fitS(),x:(r.width/2-V.x)/V.s/W,y:(r.height/2-V.y)/V.s/H};const t=performance.now();if(t-lv>40){lv=t;send(lastView)}clearTimeout(vt);vt=setTimeout(()=>send(lastView),90)}
+function applyView(m){const r=cv.getBoundingClientRect();lastView=m;V.s=m.z*fitS();V.x=r.width/2-m.x*W*V.s;V.y=r.height/2-m.y*H*V.s}
+$('fit').onclick=()=>{fit();sendView()};addEventListener('resize',()=>{resize();fit()});
 const toW=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left-V.x)/V.s,(e.clientY-r.top-V.y)/V.s]};
 function place(force){if(!me.name)return;if(!ptrs[me.id]||force){const o=Object.keys(ptrs).length*40;ptrs[me.id]={t:'ptr',u:me.id,n:me.name,c:me.c,x:W/2+o,y:H/2+o}}ptrs[me.id].n=me.name;send(ptrs[me.id])}
 let lastP=0;function setPtr(w){const p=ptrs[me.id]||(ptrs[me.id]={t:'ptr',u:me.id,c:me.c});p.n=me.name;p.x=w[0];p.y=w[1];const t=performance.now();if(t-lastP>40){lastP=t;send(p)}}
@@ -118,27 +130,29 @@ cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);P.set(e.pointerId,[e.clie
  else if(tool=='sel')sel=hit(w);
  else if(tool=='pan')pan0=[e.clientX-V.x,e.clientY-V.y]};
 cv.onpointermove=e=>{if(!P.has(e.pointerId))return;P.set(e.pointerId,[e.clientX,e.clientY]);
- if(P.size==2){const n=pinch(),wx=(pin.cx-V.x)/V.s,wy=(pin.cy-V.y)/V.s;V.s=Math.min(40,Math.max(.1,V.s*n.d/pin.d));V.x=n.cx-wx*V.s;V.y=n.cy-wy*V.s;pin=n;return}
+ if(P.size==2){const n=pinch(),wx=(pin.cx-V.x)/V.s,wy=(pin.cy-V.y)/V.s;V.s=Math.min(40,Math.max(.1,V.s*n.d/pin.d));V.x=n.cx-wx*V.s;V.y=n.cy-wy*V.s;pin=n;sendView();return}
  const w=toW(e);
  if(tool=='ptr')setPtr(w);
  else if(cur&&tool=='pen')cur.pts.push(w);
  else if(cur&&tool=='las'){cur.pts.push([w[0],w[1],performance.now()]);send({t:'las',id:cur.id,c:me.c,x:w[0],y:w[1]})}
- else if(tool=='pan'&&pan0){V.x=e.clientX-pan0[0];V.y=e.clientY-pan0[1]}};
+ else if(tool=='pan'&&pan0){V.x=e.clientX-pan0[0];V.y=e.clientY-pan0[1];sendView()}};
 const up=e=>{P.delete(e.pointerId);pin=null;pan0=null;if(cur&&tool=='pen'){if(cur.pts.length<2)cur.pts.push([cur.pts[0][0]+.1,cur.pts[0][1]]);send({t:'st',s:cur})}cur=null};
 cv.onpointerup=up;cv.onpointercancel=up;
-cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,wx=(px-V.x)/V.s,wy=(py-V.y)/V.s;V.s=Math.min(40,Math.max(.1,V.s*(e.deltaY<0?1.15:.87)));V.x=px-wx*V.s;V.y=py-wy*V.s},{passive:false});
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,wx=(px-V.x)/V.s,wy=(py-V.y)/V.s;V.s=Math.min(40,Math.max(.1,V.s*(e.deltaY<0?1.15:.87)));V.x=px-wx*V.s;V.y=py-wy*V.s;sendView()},{passive:false});
 function hit(w){const tol=14/V.s;let best=null,bd=tol;for(const id in strokes){const p=strokes[id].pts;for(let i=0;i<p.length-1;i++){const d=segD(w,p[i],p[i+1]);if(d<bd){bd=d;best=id}}}return best}
 function segD(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;t=Math.max(0,Math.min(1,t));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)}
 $('del').onclick=()=>{if(sel&&strokes[sel]){delete strokes[sel];send({t:'del',id:sel});sel=null}};
 
 /* ---- 描画 ---- */
-function arrow(p){const k=1/V.s;cx.save();cx.translate(p.x,p.y);cx.scale(k,k);cx.fillStyle=p.c;cx.strokeStyle='#fff';cx.lineWidth=2.5;cx.lineJoin='round';
- cx.beginPath();cx.moveTo(0,0);cx.lineTo(-9,-24);cx.lineTo(-3,-21);cx.lineTo(-18,-46);cx.lineTo(-11,-50);cx.lineTo(4,-25);cx.lineTo(9,-28);cx.closePath();cx.stroke();cx.fill();
- const n=p.n||'';cx.font='bold 15px sans-serif';const tw=cx.measureText(n).width+14;
- cx.fillStyle=p.c;cx.beginPath();cx.roundRect(-14,-76,tw,24,6);cx.fill();cx.fillStyle='#fff';cx.fillText(n,-7,-59);cx.restore()}
+function arrow(p){const k=1/V.s;cx.save();cx.translate(p.x,p.y);cx.scale(k,k);cx.lineJoin='round';cx.save();cx.scale(.5,.5);
+ cx.beginPath();cx.moveTo(2,2);cx.lineTo(36,29);cx.lineTo(14,33);cx.lineTo(10,46);cx.closePath();
+ cx.strokeStyle='rgba(255,255,255,.9)';cx.lineWidth=10;cx.stroke();
+ cx.fillStyle=cx.strokeStyle=p.c;cx.lineWidth=6;cx.stroke();cx.fill();cx.restore();
+ const n=p.n||'';if(n){cx.font='15px \'RocknRoll One\',\'Hiragino Maru Gothic ProN\',\'Hiragino Sans\',sans-serif';const tw=cx.measureText(n).width+14;
+ cx.fillStyle=p.c;cx.beginPath();cx.roundRect(12,22,tw,22,6);cx.fill();cx.fillStyle='#fff';cx.fillText(n,19,38)}cx.restore()}
 function frame(){const now=performance.now();cx.setTransform(1,0,0,1,0,0);cx.clearRect(0,0,cv.width,cv.height);
  cx.setTransform(dpr*V.s,0,0,dpr*V.s,dpr*V.x,dpr*V.y);
- if(img)cx.drawImage(img,0,0,W,H);else{cx.fillStyle='#fff';cx.fillRect(0,0,W,H);cx.fillStyle='#888';cx.font='28px sans-serif';cx.textAlign='center';cx.fillText('「図面読込」で画像・PDF・DXFを開いてください',W/2,H/2);cx.textAlign='left'}
+ if(img)cx.drawImage(img,0,0,W,H);else{cx.fillStyle='#fff';cx.fillRect(0,0,W,H);cx.fillStyle='#888';cx.font='28px \'RocknRoll One\',\'Hiragino Maru Gothic ProN\',\'Hiragino Sans\',sans-serif';cx.textAlign='center';cx.fillText('「図面読込」で画像・PDF・DXFを開いてください',W/2,H/2);cx.textAlign='left'}
  cx.lineCap=cx.lineJoin='round';
  for(const id in strokes){const s=strokes[id];cx.strokeStyle=s.c;cx.lineWidth=3/V.s;cx.beginPath();s.pts.forEach((q,i)=>i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1]));cx.stroke();
   if(id==sel){cx.strokeStyle='rgba(255,200,0,.6)';cx.lineWidth=12/V.s;cx.stroke()}}
