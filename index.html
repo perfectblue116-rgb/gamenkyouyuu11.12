@@ -4,9 +4,9 @@
 <title>現場図面共有</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=RocknRoll+One&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@800&display=swap">
 <style>
-*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:'RocknRoll One','Hiragino Maru Gothic ProN','Hiragino Sans',sans-serif;background:#555}
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:'Noto Sans JP','Hiragino Maru Gothic ProN','Hiragino Sans',sans-serif;font-weight:800;background:#555}
 body{display:flex;flex-direction:column;overscroll-behavior:none}
 #bar{background:#fff;padding:6px;padding-top:max(6px,env(safe-area-inset-top));display:flex;flex-wrap:wrap;gap:5px;align-items:center;border-bottom:1px solid #ccc;font-size:13px}
 #bar button,#bar select,#bar label.b{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:15px;padding:4px 11px;border:3px solid #777;border-radius:10px;background:#dce9f8;color:#111;cursor:pointer}
@@ -31,6 +31,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;backgr
  <button data-t="pan"><svg viewBox="0 0 24 24"><path d="M12 1.5L16.5 7H13.5V10.5H17V7.5L22.5 12L17 16.5V13.5H13.5V17H16.5L12 22.5L7.5 17H10.5V13.5H7V16.5L1.5 12L7 7.5V10.5H10.5V7H7.5Z" fill="#f00"/></svg>移動</button>
  <button id="del">選択を削除</button><button id="fit">全体</button>
  <span id="st">未接続(ひとりで使用中)</span>
+ <span style="color:#888;font-size:11px">ver 1112-h</span>
 </div>
 <div id="wrap"><canvas id="cv"></canvas></div>
 <script>
@@ -160,11 +161,11 @@ function arrow(p){const k=1/V.s;cx.save();cx.translate(p.x,p.y);cx.scale(k,k);cx
  cx.beginPath();cx.moveTo(2,2);cx.lineTo(36,29);cx.lineTo(14,33);cx.lineTo(10,46);cx.closePath();
  cx.strokeStyle='rgba(255,255,255,.9)';cx.lineWidth=10;cx.stroke();
  cx.fillStyle=cx.strokeStyle=p.c;cx.lineWidth=6;cx.stroke();cx.fill();cx.restore();
- const n=p.n||'';if(n){cx.font='15px \'RocknRoll One\',\'Hiragino Maru Gothic ProN\',\'Hiragino Sans\',sans-serif';const tw=cx.measureText(n).width+14;
+ const n=p.n||'';if(n){cx.font='800 15px \'Noto Sans JP\',\'Hiragino Maru Gothic ProN\',\'Hiragino Sans\',sans-serif';const tw=cx.measureText(n).width+14;
  cx.fillStyle=p.c;cx.beginPath();cx.roundRect(12,22,tw,22,6);cx.fill();cx.fillStyle='#fff';cx.fillText(n,19,38)}cx.restore()}
 function frame(){const now=performance.now();const key=V.s+','+V.x+','+V.y+','+cv.width;if(key!==vk){vk=key;clearTimeout(ht);ht=setTimeout(renderHi,160)}cx.setTransform(1,0,0,1,0,0);cx.clearRect(0,0,cv.width,cv.height);
  cx.setTransform(dpr*V.s,0,0,dpr*V.s,dpr*V.x,dpr*V.y);cx.imageSmoothingQuality='high';
- if(img)cx.drawImage(img,0,0,W,H);else{cx.fillStyle='#fff';cx.fillRect(0,0,W,H);cx.fillStyle='#888';cx.font='28px \'RocknRoll One\',\'Hiragino Maru Gothic ProN\',\'Hiragino Sans\',sans-serif';cx.textAlign='center';cx.fillText('「図面読込」で画像・PDF・DXFを開いてください',W/2,H/2);cx.textAlign='left'}
+ if(img)cx.drawImage(img,0,0,W,H);else{cx.fillStyle='#fff';cx.fillRect(0,0,W,H);cx.fillStyle='#888';cx.font='800 28px \'Noto Sans JP\',\'Hiragino Maru Gothic ProN\',\'Hiragino Sans\',sans-serif';cx.textAlign='center';cx.fillText('「図面読込」で画像・PDF・DXFを開いてください',W/2,H/2);cx.textAlign='left'}
  if(hi&&Vh){const r=V.s/Vh.s;cx.save();cx.setTransform(r,0,0,r,dpr*(V.x-Vh.x*r),dpr*(V.y-Vh.y*r));cx.drawImage(hi,0,0);cx.restore()}
  cx.lineCap=cx.lineJoin='round';
  for(const id in strokes){const s=strokes[id];cx.strokeStyle=s.c;cx.lineWidth=3/V.s;cx.beginPath();s.pts.forEach((q,i)=>i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1]));cx.stroke();
